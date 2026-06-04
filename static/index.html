@@ -1,0 +1,608 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SecFlow · 流量安全分析</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Orbitron:wght@400;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --bg-dark: #0a0e17;
+      --bg-panel: #0f1629;
+      --border: #1e3a5f;
+      --accent: #00d4ff;
+      --accent-dim: #00a8cc;
+      --glow: rgba(0, 212, 255, 0.35);
+      --text: #e2e8f0;
+      --text-muted: #64748b;
+      --success: #22c55e;
+      --error: #ef4444;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; margin: 0; }
+    body {
+      font-family: "JetBrains Mono", "Consolas", monospace;
+      background: var(--bg-dark);
+      color: var(--text);
+      min-height: 100%;
+      padding: 12px 16px;
+      position: relative;
+      overflow-x: hidden;
+    }
+    /* 科技感网格背景 */
+    body::before {
+      content: "";
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(0, 212, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(0, 212, 255, 0.03) 1px, transparent 1px);
+      background-size: 24px 24px;
+      pointer-events: none;
+      z-index: 0;
+    }
+    .wrap { position: relative; z-index: 1; width: 100%; max-width: 100%; margin: 0 auto; }
+
+    .header {
+      text-align: center;
+      margin-bottom: 32px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--border);
+    }
+    .logo {
+      font-family: "Orbitron", sans-serif;
+      font-weight: 700;
+      font-size: 1.75rem;
+      letter-spacing: 0.2em;
+      color: var(--accent);
+      text-shadow: 0 0 20px var(--glow);
+      margin-bottom: 4px;
+    }
+    .tagline {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+      letter-spacing: 0.15em;
+      text-transform: uppercase;
+    }
+
+    .panel {
+      background: var(--bg-panel);
+      border: 1px solid var(--border);
+      border-radius: 4px;
+      padding: 18px 20px;
+      margin-bottom: 16px;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.4);
+    }
+    .panel-title {
+      font-family: "Orbitron", sans-serif;
+      font-size: 0.75rem;
+      color: var(--accent-dim);
+      letter-spacing: 0.2em;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .panel-title::before {
+      content: "";
+      width: 4px;
+      height: 14px;
+      background: var(--accent);
+      box-shadow: 0 0 10px var(--glow);
+    }
+
+    .upload-zone {
+      border: 2px dashed var(--border);
+      border-radius: 4px;
+      padding: 32px;
+      text-align: center;
+      background: rgba(0, 212, 255, 0.02);
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .upload-zone:hover, .upload-zone.dragover {
+      border-color: var(--accent-dim);
+      box-shadow: 0 0 20px var(--glow);
+    }
+    .upload-zone label {
+      display: block;
+      font-size: 0.85rem;
+      color: var(--text-muted);
+      margin-bottom: 12px;
+    }
+    input[type="file"] {
+      margin: 8px 0 16px;
+      font-size: 0.8rem;
+      color: var(--text);
+    }
+    .btn {
+      font-family: "Orbitron", sans-serif;
+      font-weight: 600;
+      font-size: 0.85rem;
+      letter-spacing: 0.1em;
+      background: transparent;
+      color: var(--accent);
+      border: 1px solid var(--accent);
+      padding: 12px 24px;
+      cursor: pointer;
+      transition: background 0.2s, box-shadow 0.2s;
+      border-radius: 2px;
+    }
+    .btn:hover:not(:disabled) {
+      background: rgba(0, 212, 255, 0.15);
+      box-shadow: 0 0 20px var(--glow);
+    }
+    .btn:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+
+    .status {
+      margin-top: 16px;
+      min-height: 24px;
+      font-size: 0.8rem;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .status::before {
+      content: ">";
+      color: var(--accent);
+    }
+    .status.error { color: var(--error); }
+    .status.error::before { content: "!"; color: var(--error); }
+    .status.success { color: var(--success); }
+    .status.success::before { content: "✓"; color: var(--success); }
+
+    .result-wrap .panel-title { margin-bottom: 12px; }
+    .result-actions { margin-bottom: 14px; }
+    .result-actions .btn { padding: 8px 16px; font-size: 0.75rem; }
+    #result {
+      margin: 0;
+      padding: 0;
+      background: linear-gradient(180deg, #080d14 0%, #060a10 100%);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      white-space: pre-wrap;
+      word-break: break-all;
+      max-height: 70vh;
+      overflow: auto;
+      font-size: 0.75rem;
+      line-height: 1.5;
+      color: #94a3b8;
+      box-shadow: inset 0 0 60px rgba(0,0,0,0.3);
+    }
+    #result:empty { display: none; }
+    #result > pre {
+      margin: 0;
+      padding: 20px;
+      font-size: 0.72rem;
+      line-height: 1.5;
+      color: #94a3b8;
+    }
+    .report-view {
+      white-space: normal;
+      padding: 24px;
+      animation: reportFade 0.4s ease-out;
+    }
+    @keyframes reportFade {
+      from { opacity: 0; transform: translateY(8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+    .report-hero {
+      text-align: center;
+      padding: 24px 20px 28px;
+      margin: -24px -24px 24px -24px;
+      background: linear-gradient(135deg, rgba(0,212,255,0.08) 0%, rgba(0,168,204,0.03) 100%);
+      border-bottom: 1px solid var(--border);
+      border-radius: 8px 8px 0 0;
+    }
+    .report-hero .file-name {
+      font-family: "Orbitron", sans-serif;
+      font-size: 1rem;
+      font-weight: 600;
+      color: var(--accent);
+      letter-spacing: 0.05em;
+      text-shadow: 0 0 24px var(--glow);
+      margin-bottom: 8px;
+    }
+    .report-hero .meta-line {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+    .report-hero .meta-line span { margin: 0 12px; }
+    .report-hero .meta-line .dur { color: var(--accent-dim); font-weight: 500; }
+    .report-summary {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 14px;
+      margin-bottom: 28px;
+    }
+    @media (max-width: 560px) { .report-summary { grid-template-columns: repeat(2, 1fr); } }
+    .report-summary .stat {
+      padding: 16px 14px;
+      border-radius: 8px;
+      font-size: 0.8rem;
+      text-align: center;
+      transition: transform 0.2s, box-shadow 0.2s;
+    }
+    .report-summary .stat:hover { transform: translateY(-2px); }
+    .report-summary .stat .num {
+      display: block;
+      font-family: "Orbitron", sans-serif;
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 4px;
+      letter-spacing: 0.05em;
+    }
+    .report-summary .stat .label { font-size: 0.7rem; opacity: 0.9; }
+    .report-summary .stat.total {
+      background: linear-gradient(145deg, rgba(0,212,255,0.12) 0%, rgba(0,168,204,0.06) 100%);
+      border: 1px solid rgba(0,212,255,0.35);
+      color: var(--accent);
+      box-shadow: 0 0 20px rgba(0,212,255,0.08);
+    }
+    .report-summary .stat.total .num { color: var(--accent); }
+    .report-summary .stat.critical {
+      background: linear-gradient(145deg, rgba(239,68,68,0.2) 0%, rgba(185,28,28,0.08) 100%);
+      border: 1px solid rgba(239,68,68,0.4);
+      color: #fca5a5;
+      box-shadow: 0 0 16px rgba(239,68,68,0.06);
+    }
+    .report-summary .stat.critical .num { color: #f87171; }
+    .report-summary .stat.high {
+      background: linear-gradient(145deg, rgba(234,179,8,0.18) 0%, rgba(161,98,7,0.08) 100%);
+      border: 1px solid rgba(234,179,8,0.4);
+      color: #fde047;
+      box-shadow: 0 0 16px rgba(234,179,8,0.06);
+    }
+    .report-summary .stat.high .num { color: #fbbf24; }
+    .report-summary .stat.medium {
+      background: linear-gradient(145deg, rgba(34,197,94,0.12) 0%, rgba(22,163,74,0.06) 100%);
+      border: 1px solid rgba(34,197,94,0.35);
+      color: #86efac;
+      box-shadow: 0 0 16px rgba(34,197,94,0.06);
+    }
+    .report-summary .stat.medium .num { color: #4ade80; }
+    .report-summary .stat.normal { background: rgba(148,163,184,0.15); border: 1px solid rgba(148,163,184,0.35); }
+    .report-summary .stat.normal .num { color: #94a3b8; }
+    .report-section {
+      margin-bottom: 26px;
+    }
+    .report-section h4 {
+      font-family: "Orbitron", sans-serif;
+      font-size: 0.72rem;
+      letter-spacing: 0.18em;
+      color: var(--accent-dim);
+      margin-bottom: 14px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .report-section h4::before {
+      content: "";
+      width: 3px;
+      height: 16px;
+      background: var(--accent);
+      border-radius: 2px;
+      box-shadow: 0 0 10px var(--glow);
+    }
+    .report-table-wrap {
+      border-radius: 8px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: rgba(0,0,0,0.2);
+    }
+    .report-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.74rem;
+    }
+    .report-table th {
+      padding: 12px 14px;
+      text-align: left;
+      background: rgba(0,212,255,0.06);
+      color: var(--accent-dim);
+      font-family: "Orbitron", sans-serif;
+      font-size: 0.68rem;
+      letter-spacing: 0.1em;
+    }
+    .report-table td {
+      padding: 10px 14px;
+      text-align: left;
+      border-top: 1px solid rgba(30,58,95,0.6);
+      transition: background 0.15s;
+    }
+    .report-table tbody tr:hover {
+      background: rgba(0,212,255,0.06);
+    }
+    .report-table tbody tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+    .report-table tbody tr:nth-child(even):hover { background: rgba(0,212,255,0.06); }
+    .report-table .sev-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.68rem;
+      font-weight: 600;
+      letter-spacing: 0.05em;
+    }
+    .report-table .sev-badge.sev-1 { background: rgba(239,68,68,0.25); color: #fca5a5; border: 1px solid rgba(239,68,68,0.5); }
+    .report-table .sev-badge.sev-2 { background: rgba(234,179,8,0.25); color: #fde047; border: 1px solid rgba(234,179,8,0.5); }
+    .report-table .sev-badge.sev-3 { background: rgba(34,197,94,0.2); color: #86efac; border: 1px solid rgba(34,197,94,0.4); }
+    .report-table .sev-badge.sev-5 { background: rgba(148,163,184,0.2); color: #94a3b8; border: 1px solid rgba(148,163,184,0.4); }
+    .report-table .ip { font-family: "JetBrains Mono", monospace; font-size: 0.7rem; color: var(--text-muted); }
+    .report-recs {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    .report-recs li {
+      padding: 12px 16px 12px 40px;
+      margin-bottom: 10px;
+      background: rgba(0,212,255,0.04);
+      border: 1px solid rgba(30,58,95,0.8);
+      border-radius: 8px;
+      font-size: 0.82rem;
+      line-height: 1.5;
+      position: relative;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+    .report-recs li:hover {
+      border-color: var(--accent-dim);
+      box-shadow: 0 0 20px rgba(0,212,255,0.06);
+    }
+    .report-recs li::before {
+      content: "◆";
+      position: absolute;
+      left: 14px;
+      color: var(--accent);
+      font-size: 0.7rem;
+      top: 50%;
+      transform: translateY(-50%);
+    }
+    .report-empty-msg {
+      text-align: center;
+      padding: 32px 20px;
+      color: var(--text-muted);
+      font-size: 0.85rem;
+    }
+
+    .footer {
+      margin-top: 24px;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+    .footer code {
+      color: var(--accent-dim);
+      padding: 0 4px;
+    }
+
+    /* 加载动画 */
+    .status.loading::after {
+      content: "";
+      display: inline-block;
+      width: 6px;
+      height: 6px;
+      margin-left: 6px;
+      border: 1px solid var(--accent);
+      border-top-color: transparent;
+      border-radius: 50%;
+      animation: spin 0.8s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header class="header">
+      <div class="logo">SECFLOW</div>
+      <div class="tagline">PCAP 流量安全分析平台</div>
+    </header>
+
+    <div class="panel">
+      <div class="panel-title">上传流量包</div>
+      <div class="upload-zone" id="dropZone">
+        <label for="file">支持 .pcap / .pcapng / .cap</label>
+        <input type="file" id="file" accept=".pcap,.pcapng,.cap" />
+        <br />
+        <button type="button" class="btn" id="btn">开始分析</button>
+      </div>
+      <div class="status" id="status"></div>
+    </div>
+
+    <div class="panel result-wrap">
+      <div class="panel-title">分析报告</div>
+      <div class="result-actions" id="resultActions" style="display: none;">
+        <button type="button" class="btn" id="btnToggleRaw">显示原始 JSON</button>
+      </div>
+      <div id="result"></div>
+    </div>
+
+    <p class="footer">后端请执行 <code>python app.py</code> · 访问 <code>http://127.0.0.1:5000/</code></p>
+  </div>
+
+  <script>
+    (function () {
+      var API_BASE = "";
+      var fileInput = document.getElementById("file");
+      var btn = document.getElementById("btn");
+      var statusEl = document.getElementById("status");
+      var resultEl = document.getElementById("result");
+      var resultActions = document.getElementById("resultActions");
+      var btnToggleRaw = document.getElementById("btnToggleRaw");
+      var dropZone = document.getElementById("dropZone");
+      var lastReportJson = null;
+      var showingRaw = false;
+
+      function setStatus(msg, type) {
+        statusEl.textContent = msg;
+        statusEl.className = "status " + (type || "");
+      }
+
+      function esc(s) {
+        if (s == null) return "";
+        return String(s)
+          .replace(/&/g, "&amp;")
+          .replace(/</g, "&lt;")
+          .replace(/>/g, "&gt;")
+          .replace(/"/g, "&quot;");
+      }
+
+      function renderReport(report) {
+        var meta = report.metadata || {};
+        var sum = report.summary || {};
+        var details = report.detailed_results || [];
+        var recs = report.recommendations || [];
+        var severityLabel = { 1: "严重", 2: "高危", 3: "中危", 5: "正常" };
+        var html = '<div class="report-view">';
+        html += '<div class="report-hero">';
+        html += '<div class="file-name">' + esc(meta.pcap_file) + '</div>';
+        html += '<div class="meta-line">分析时间 <span class="dur">' + esc(meta.analysis_time) + '</span><span>·</span>耗时 <span class="dur">' + esc(meta.duration_seconds) + ' 秒</span></div>';
+        html += '</div>';
+        html += '<div class="report-summary">';
+        html += '<div class="stat total"><span class="num">' + (sum.total_alerts || 0) + '</span><span class="label">总告警</span></div>';
+        html += '<div class="stat critical"><span class="num">' + (sum.critical_alerts || 0) + '</span><span class="label">严重</span></div>';
+        html += '<div class="stat high"><span class="num">' + (sum.high_alerts || 0) + '</span><span class="label">高危</span></div>';
+        html += '<div class="stat medium"><span class="num">' + (sum.medium_alerts || 0) + '</span><span class="label">中危</span></div>';
+        html += '<div class="stat normal"><span class="num">' + (sum.normal_alerts || 0) + '</span><span class="label">正常</span></div>';
+        html += '</div>';
+        if (details.length) {
+          html += '<div class="report-section"><h4>告警明细</h4><div class="report-table-wrap"><table class="report-table"><thead><tr><th>严重程度</th><th>分类</th><th>描述</th><th>源 IP</th><th>目标 IP</th></tr></thead><tbody>';
+          for (var i = 0; i < details.length && i < 100; i++) {
+            var r = details[i];
+            var isNormal = (r.classification || '').trim() === '正常流量';
+            var sev = isNormal ? 5 : (r.severity || 3);
+            var sevText = severityLabel[sev] || (sev === 5 ? '正常' : '中危');
+            html += '<tr><td><span class="sev-badge sev-' + sev + '">' + esc(sevText) + '</span></td><td>' + esc(r.classification) + '</td><td>' + esc(r.msg || "—") + '</td><td class="ip">' + esc(r.src_ip) + '</td><td class="ip">' + esc(r.dst_ip) + '</td></tr>';
+          }
+          if (details.length > 100) html += '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:12px;">仅显示前 100 条，共 ' + details.length + ' 条</td></tr>';
+          html += '</tbody></table></div></div>';
+        } else {
+          html += '<div class="report-section"><h4>告警明细</h4><div class="report-empty-msg">未检测到告警</div></div>';
+        }
+        if (recs.length) {
+          html += '<div class="report-section"><h4>安全建议</h4><ul class="report-recs">';
+          for (var j = 0; j < recs.length; j++) html += '<li>' + esc(recs[j]) + '</li>';
+          html += '</ul></div>';
+        }
+        html += '</div>';
+        return html;
+      }
+
+      function setResult(text) {
+        lastReportJson = null;
+        resultActions.style.display = "none";
+        resultEl.innerHTML = "";
+        resultEl.textContent = text || "";
+      }
+
+      function showReport(report) {
+        lastReportJson = report;
+        showingRaw = false;
+        resultActions.style.display = "block";
+        btnToggleRaw.textContent = "显示原始 JSON";
+        resultEl.innerHTML = renderReport(report);
+        resultEl.classList.add("report-view-wrap");
+      }
+
+      function showRawJson() {
+        if (!lastReportJson) return;
+        showingRaw = true;
+        btnToggleRaw.textContent = "显示报告视图";
+        resultEl.innerHTML = "<pre>" + esc(JSON.stringify(lastReportJson, null, 2)) + "</pre>";
+        resultEl.classList.remove("report-view-wrap");
+      }
+
+      btnToggleRaw.addEventListener("click", function () {
+        if (showingRaw) {
+          showingRaw = false;
+          btnToggleRaw.textContent = "显示原始 JSON";
+          resultEl.innerHTML = renderReport(lastReportJson);
+          resultEl.classList.add("report-view-wrap");
+        } else {
+          showRawJson();
+        }
+      });
+
+      dropZone.addEventListener("dragover", function (e) {
+        e.preventDefault();
+        dropZone.classList.add("dragover");
+      });
+      dropZone.addEventListener("dragleave", function () {
+        dropZone.classList.remove("dragover");
+      });
+      dropZone.addEventListener("drop", function (e) {
+        e.preventDefault();
+        dropZone.classList.remove("dragover");
+        var files = e.dataTransfer.files;
+        if (files.length) fileInput.files = files;
+      });
+
+      btn.addEventListener("click", function () {
+        var file = fileInput.files[0];
+        if (!file) {
+          setStatus("请先选择或拖入文件", "error");
+          return;
+        }
+
+        btn.disabled = true;
+        setStatus("正在上传并分析…", "loading");
+        setResult("");
+
+        var formData = new FormData();
+        formData.append("file", file);
+
+        var timeoutMs = 600000;
+        var controller = new AbortController();
+        var timeoutId = setTimeout(function () {
+          controller.abort();
+        }, timeoutMs);
+
+        fetch(API_BASE + "/api/upload", { method: "POST", body: formData, signal: controller.signal })
+          .then(function (res) {
+            clearTimeout(timeoutId);
+            if (!res.ok) {
+              return res.json().then(function (data) {
+                throw new Error(data.error || data.detail || "请求失败 " + res.status);
+              }).catch(function () {
+                throw new Error("请求失败 " + res.status + " " + res.statusText);
+              });
+            }
+            return res.json();
+          })
+          .then(function (data) {
+            if (data.success && data.report) {
+              setStatus("分析完成", "success");
+              showReport(data.report);
+            } else {
+              setStatus(data.error || "未知错误", "error");
+              setResult(data.detail || "");
+            }
+          })
+          .catch(function (err) {
+            clearTimeout(timeoutId);
+            var msg = err.message || String(err);
+            if (err.name === "AbortError") {
+              setStatus("请求超时（分析时间过长）", "error");
+              setResult("分析超过 " + (timeoutMs / 60000) + " 分钟未返回。请查看终端日志，报告可能已保存到 reports 目录。");
+            } else if (msg.indexOf("Failed to fetch") !== -1 || msg.indexOf("NetworkError") !== -1 || msg.indexOf("Load failed") !== -1) {
+              setStatus("连接中断", "error");
+              setResult("与后端连接中断。若分析刚结束就断开，可能是进程退出导致。请用 FLASK_RELOAD=0 或直接 python app.py 运行；报告可能已保存到 reports 目录。");
+            } else {
+              setStatus("错误: " + msg, "error");
+              setResult("");
+            }
+            console.error(err);
+          })
+          .finally(function () {
+            btn.disabled = false;
+          });
+      });
+    })();
+  </script>
+</body>
+</html>

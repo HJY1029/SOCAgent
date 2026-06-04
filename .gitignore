@@ -1,0 +1,22 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# IDE
+.idea/
+
+# Runtime / uploads
+uploads/*
+!uploads/.gitkeep
+*.log
+
+# Large ML assets (download or train locally)
+engine/datasets/
+engine/ml_models/*.pkl
+
+# Local experiment outputs (optional large artifacts)
+reports/
+results/

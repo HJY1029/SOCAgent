@@ -1,0 +1,69 @@
+[
+  {
+    "id": "rule-001",
+    "name": "SQL注入检测",
+    "description": "检测常见SQL注入模式",
+    "severity": "high",
+    "conditions": [
+      {
+        "field": "raw_data",
+        "operator": "contains",
+        "value": ["' OR '1'='1", "UNION SELECT", "DROP TABLE"]
+      },
+      {
+        "field": "features.Flow Duration",
+        "operator": "lt",
+        "value": 1.0
+      }
+    ],
+    "logic": "all"
+  },
+  {
+    "id": "rule-002",
+    "name": "端口扫描检测",
+    "description": "检测端口扫描行为",
+    "severity": "medium",
+    "conditions": [
+      {
+        "field": "features.SYN Flag Count",
+        "operator": "gt",
+        "value": 100
+      },
+      {
+        "field": "features.RST Flag Count",
+        "operator": "gt",
+        "value": 50
+      },
+      {
+        "field": "features.Flow Duration",
+        "operator": "lt",
+        "value": 5.0
+      }
+    ],
+    "logic": "all"
+  },
+  {
+    "id": "rule-003",
+    "name": "数据渗漏检测",
+    "description": "检测异常数据外传",
+    "severity": "critical",
+    "conditions": [
+      {
+        "field": "features.Total Bwd Packets",
+        "operator": "gt",
+        "value": 1000
+      },
+      {
+        "field": "features.Bwd Packet Length Max",
+        "operator": "gt",
+        "value": 10000
+      },
+      {
+        "field": "features.Flow Bytes/s",
+        "operator": "lt",
+        "value": 100
+      }
+    ],
+    "logic": "all"
+  }
+]

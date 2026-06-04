@@ -1,0 +1,491 @@
+\documentclass[sigconf,authordraft]{acmart}
+\AtBeginDocument{%
+  \providecommand\BibTeX{{Bib\TeX}}}
+
+\usepackage[super]{cite}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{enumitem}
+\usepackage{caption}
+\usepackage{booktabs}
+
+\title[Network Attack Alert Analysis with Generative Large Models]{Research on Network Attack Alert Analysis Based on Generative Large Models}
+
+\author{ZI-HAN DING}
+\authornotemark[1]
+\email{2022141230168@stu.scu.edu.cn}
+\affiliation{%
+  \institution{School of Cyber Science and Engineering, Sichuan University}
+  \city{Chengdu}
+  \state{Sichuan}
+  \country{China}
+}
+
+\author{JIA-YI HE}
+\email{2022141500268@stu.scu.edu.cn}
+\affiliation{%
+  \institution{School of Cyber Science and Engineering, Sichuan University}
+  \city{Chengdu}
+  \state{Sichuan}
+  \country{China}
+}
+
+\author{YU-HANG CHEN}
+\email{2023141530033@stu.scu.edu.cn}
+\affiliation{%
+  \institution{School of Cyber Science and Engineering, Sichuan University}
+  \city{Chengdu}
+  \state{Sichuan}
+  \country{China}
+}
+
+\author{XIN-TONG ZHONG}
+\email{2023141530156@stu.scu.edu.cn}
+\affiliation{%
+  \institution{School of Cyber Science and Engineering, Sichuan University}
+  \city{Chengdu}
+  \state{Sichuan}
+  \country{China}
+}
+
+\author{YU-CHANG ZHONG}
+\email{2023141530123@stu.scu.edu.cn}
+\affiliation{%
+  \institution{School of Cyber Science and Engineering, Sichuan University}
+  \city{Chengdu}
+  \state{Sichuan}
+  \country{China}
+}
+
+\author{XING-SHU CHEN}
+\authornotemark[*]
+\email{chenxsh@scu.edu.cn}
+\affiliation{%
+  \institution{School of Cyber Science and Engineering, Sichuan University}
+  \city{Chengdu}
+  \state{Sichuan}
+  \country{China}
+}
+
+\renewcommand{\shortauthors}{Ding et al.}
+
+\begin{document}
+
+\begin{abstract}
+Addressing low manual efficiency and fixed engine poor adaptability in SOC alarm analysis, this paper proposes a generative large model-RAG integrated dynamic workflow engine framework, breaking through from fixed process execution to intelligent orchestration. Traditional models have obvious limitations: manual assessment relies on expert experience, leading to false positives, backlogs, and delays amid massive alerts; rigid SOAR systems depend on preset scripts, struggling to adapt to unknown threats and dynamic assets. This framework takes LLM as the core to build a ``layered detection-clue enhancement-knowledge empowerment'' collaborative system: threat detection agent integrates three engines for millisecond-level known threat matching and unknown anomaly identification; clue forensics agent supplements context via intelligence matching and path deduction; vector knowledge base (Sentence-BERT+FAISS) solves LLM hallucinations and knowledge lag. Experiments show 95.8\%--99.3\% F1-Score on three datasets (0.9\%--1.9\% higher than single components), 6.58Gbps throughput at 10Gbps traffic, 45$\times$ manual efficiency, $\leq$1.36\% false alarm rate, and standardized report output.
+\end{abstract}
+
+\keywords{Network Attack Alert Analysis; Generative Large Model; RAG; Dynamic Workflow Engine; Threat Detection; Clue Forensics; Vector Knowledge Base; MITRE ATT\&CK}
+
+\maketitle
+
+\section{Introduction}
+
+Digitalization highlights cybersecurity's importance, and SOC---defense's central nervous system---relies on alert detection/assessment for effective threat response. Verizon report~\cite{ref1} analyzed 30,458 security incidents and 10,626 confirmed breaches across 94 countries, while reports indicate that China's key sectors faced over 1,300 overseas APT attacks in 2024~\cite{ref2}. Data breaches and ransomware attacks causing substantial financial losses~\cite{ref3} underscore SOC urgency, with alert analysis as a key threat identification link.
+
+Traditional analysis has bottlenecks: manual judgment depends on expert experience, leading to false alarms, delayed responses, and high talent costs~\cite{ref4}; fixed engines like SOAR rely on preset scripts, failing to adapt to unknown threats/dynamic environments with high maintenance costs~\cite{ref5,ref10}.
+
+LLM's breakthrough in semantic understanding (effective in medical and judicial domains) and RAG's external knowledge integration offer solutions. This paper proposes an LLM-RAG enhanced dynamic workflow engine framework, transforming fixed execution into intelligent orchestration via process extraction, engine architecture design, and dynamic judgment path generation.
+
+The main contributions of this article are as follows:
+
+\begin{enumerate}
+\item A smart alert analysis engine integrating large model workflows, intelligent agents, and knowledge bases is proposed. It adaptively and flexibly addresses various analysis tasks, solving the problem of delayed responses from security analysts amid massive alerts.
+\item Guided by the concept of multi-agent collaboration, it fully integrates all steps in the security analyst's analysis process, including alert type analysis, clue forensics, intelligence analysis, and response suggestion provision. This ensures the comprehensiveness, accuracy, and traceability of the analysis process.
+\item The usability of the proposed work engine in alert type identification and intelligent analysis is verified. Experimental results show that the analysis accuracy is on par with that of human analysts, while the analysis speed is significantly improved.
+\end{enumerate}
+
+The remaining parts of this article are organized as follows: Section~2, related work, systematically reviews the research status of traditional alarm analysis and intelligent analysis; Section~3 analyzes the alarm analysis process; Section~4 details the analysis framework; Section~5 presents experimental analysis and validation; Section~6 summarizes the research findings.
+
+\section{Related Work}
+
+Network attack alert analysis and triage has evolved from manual assistance toward intellectualization and automation. The research community generally focuses on detection efficiency, accuracy, and adaptability to emerging threats. This section reviews existing work by categorizing them into traditional alert analysis methods and intelligent alert analysis technologies.
+
+\subsection{Research on Traditional Cyber Attack Alert Analysis Methods}
+
+\subsubsection{Manual Analysis Assistance and Host/Anomaly Detection}
+
+Manual triage suffers from information overload and over-reliance on experience. In host and anomaly detection, Bejtlich~\cite{ref6} proposed the NSM operational framework in \textit{The Tao of Network Security Monitoring: Beyond Intrusion Detection}, and introduced methods for mining network traffic data using open-source tools to optimize monitoring and incident response. However, the false positive rate remains high in practice.
+
+Hassan et al.~\cite{ref7} proposed NoDoze, which uses causal dependency graphs for automated alert triage and root cause analysis: it assigns anomaly scores based on historical frequency and propagates scores via graph diffusion to generate prioritized subgraphs for analysts. Evaluation on 364 threat alerts shows an approximately 86\% reduction in false positives and significant time savings. Nevertheless, the method relies on causal graph construction, and its portability across different SOC environments is limited by graph quality and data availability.
+
+\subsubsection{Fixed Detection Engines and SOAR Systems}
+
+Traditional IDS and fixed-rule engines have clear limitations. Sommer and Paxson~\cite{ref8} pointed out that traditional network intrusion detection based on the ``closed-world'' assumption struggles with unknown attacks, and discussed opportunities and challenges of applying machine learning to network IDS.
+
+For anomaly detection algorithms, Liu et al.~\cite{ref9} proposed Isolation Forest, which achieves efficient anomaly detection through random sub-sampling and isolation trees, and is widely used in point anomaly identification. However, its generalization and interpretability in complex attack scenarios remain limited.
+
+Bridges et al.~\cite{ref10} conducted the first large-scale empirical user study on six commercial SOAR tools. In a constructed cyber range, experiments with 24 security operators verified that SOAR tools significantly improve security investigation efficiency and reduce analyst context switching, but decrease the accuracy and completeness of ticket records. The practical performance of SOAR highly depends on tool configuration, and excessive automation may degrade analysis quality.
+
+\subsection{Research Status of Intelligent Alert Analysis Technologies}
+
+\subsubsection{Machine Learning-Driven False Positive Filtering and Threat Classification}
+
+Machine learning is widely used for false positive filtering and threat classification in alert analysis. Bhati et al.~\cite{ref11} applied an XGBoost-based ensemble method for network intrusion detection, achieving a better bias-variance trade-off and improving the efficiency and accuracy of ensemble IDS.
+
+Hou et al.~\cite{ref12} proposed a hierarchical LSTM network for network attack detection from traffic, enhancing the modeling of attack patterns via sequential modeling. Huang et al.~\cite{ref13} combined graph neural networks (GNN) with cross-protocol analysis to detect malicious IPs, achieving high accuracy in malicious IP identification. These works mainly optimize single-stage detection or classification, lacking orchestration and scheduling for the full alert workflow.
+
+\subsubsection{Applications of Large Models and RAG in Cybersecurity}
+
+Large models and RAG have been applied in threat intelligence, vulnerability understanding, and alert interpretation. Cheng et al.~\cite{ref14} proposed CTINexus, which uses large language models to automatically construct network threat intelligence knowledge graphs, converting unstructured intelligence into structured knowledge graphs.
+
+Sun et al.~\cite{ref15} proposed LLM4Vuln, which disentangles and evaluates the vulnerability reasoning ability of large models and applies it to zero-day vulnerability detection. Varun Badrinath Krishna~\cite{ref16} introduced the AttackQA dataset to support cybersecurity operation assistance via fine-tuned open-source large models.
+
+Ismail et al.~\cite{ref17} adopted hyper-automation and agentic large models to enhance investigation quality and SOC efficiency for security orchestration and automated response (SOAR). Tariq et al.~\cite{ref18} systematically reviewed alert fatigue in security operations centers, summarizing research challenges and opportunities.
+
+Overall, existing studies have advanced single-point capabilities using large models and RAG, but remain insufficient in full workflow orchestration and LLM-RAG-driven adaptive processes. This study fills this gap with an adaptive dynamic workflow engine.
+
+\section{Alert Analysis Process}
+\label{sec:alert_process}
+
+In modern enterprise SOC operations, analysts must handle massive alerts, but traditional experience/rule-based judgment causes false alarm backlogs, fatigue, and delays in high-volume/complex scenarios.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.75\textwidth]{图片1.pdf}
+\caption{Alert Analysis Process Flowchart}
+\end{figure}
+
+As shown in Figure~1, traditional analysis starts with multi-source telemetry aggregation: Syslog, EDR (e.g., CrowdStrike), Zeek, CloudTrail, SPAN/TAP collect data, stored in Splunk via Logstash for structured output. Data is standardized (key field extraction, deduplication), then prioritized via rules/asset assessment/machine learning for L1 screening or L2 deep analysis~\cite{ref18,ref20}. L1 uses EDR/IP reputation for status marking; L2 builds timelines with MITRE ATT\&CK threat profiling~\cite{ref21}.
+
+The authoritative guide to incident response~\cite{ref19} issued by NIST and the MITRE ATT\&CK attack modeling framework~\cite{ref21} provide the core theoretical and practical basis for the optimization of various network security operation processes, and intelligent alarm classification and triage systems such as AACT~\cite{ref22} are concrete applications of such process optimization in SOC scenarios.
+
+\section{Main Method}
+
+Traditional network security alarm analysis faces issues: manual analysis has massive redundancy, fragmented data, and high knowledge dependence; fixed engines lack unknown threat generalization, context, and timely knowledge updates. This study uses LLM for multi-source data parsing, integrates RAG with a vector knowledge base to fill LLM gaps, forming a full-chain intelligent solution.
+
+\subsection{Overview of Model Architecture}
+
+Centered on ``layered detection, clue enhancement, knowledge empowerment'', the framework is supported by three core components. Following the ``classification $\to$ processing $\to$ collaboration $\to$ integrated output'' workflow, it forms a closed loop with LLM to address accuracy, context, and knowledge lag issues in traditional judgment.
+
+As shown in Figure~2, the framework initiates with ``problem input'' and has four stages for full-chain intelligence. Three input types---unstructured traffic files, structured data, natural language conversations---are classified, verified, and parsed into respective branches: Scapy-parsed PCAP files feed threat detection agents; structured data clues go to forensics agents; conversation keywords are retrieved from the vector knowledge base. With dual-layer detection (three integrated engines), internal-external intelligence association, and semantic retrieval, LLM integrates multi-source data to output standardized reports.
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=0.45\textwidth]{图片2.pdf}
+\caption{Flowchart of the Overall Framework for the Cybersecurity Alert Analysis Large Model}
+\label{fig:overall}
+\end{figure*}
+
+\subsection{Threat Detection Agent}
+
+The threat detection agent is the front-end core of the SecAgent framework, responsible for real-time threat identification and classification of multi-source heterogeneous network traffic, aiming to solve the problems of independent alarm rules, difficulty in identifying new threats, and lack of attack chain characterization in existing SOC security devices.
+
+As shown in Figure~3, this intelligent agent integrates Snort rule engine (covering known threats), custom rule engine (adapted to internal networks), and machine learning engine (capturing unknown anomalies) to form automated secondary analysis capabilities; Realize the transformation from ``alarm stacking'' to ``precise labeling'' and reduce manual workload.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.45\textwidth]{图片3.pdf}
+\caption{Threat detection intelligent agent framework flowchart}
+\end{figure}
+
+\subsubsection{SNORT RULE MATCHING ENGINE}
+
+This module is based on the Snort open-source rule library and custom rules, implementing millisecond level matching of known threats such as SQL injection. As shown in Figure~4, through the process of ``rule construction traffic parsing indexing matching output'', output JSON results including timestamps to provide standardized input for subsequent modules.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.45\textwidth]{图片4.pdf}
+\caption{Snort rule matching engine flowchart}
+\end{figure}
+
+The rule library includes 4,000+ open-source Emerging Threats rules (e.g., SQL injection) and enterprise-specific custom rules (sid $\geq$ 1000000, e.g., SYN Flood), all adhering to Snort syntax. Scapy-parsed raw traffic undergoes multi-layer detection, outputting JSON results (timestamps, threat classification) for subsequent modules.
+
+As a traditional feature-based intrusion detection system, Snort's core limitations have been confirmed by multiple studies: firstly, its single-threaded architecture leads to insufficient processing capacity for high-speed network traffic (e.g., 10~Gbps) and a higher packet loss rate compared with Suricata~\cite{ref23}; Secondly, it has limited ability to utilize multi-core hardware resources~\cite{ref24}; Thirdly, its default rule set tends to trigger a high false positive rate~\cite{ref25}.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.45\textwidth]{图片5.pdf}
+\caption{Flow Chart of Custom Rule Detection Engine}
+\end{figure}
+
+\subsubsection{MACHINE LEARNING DETECTION ENGINE}
+
+For threat types that are inherently subtle and difficult to visually detect through conventional means, the intelligent engine fully leverages advanced machine learning self-learning capabilities to deeply mine and extract intricate attack features from three widely recognized and publicly available benchmark datasets: KDD Cup 99~\cite{ref29}, CIC-IDS2017~\cite{ref30}, and UNSW-NB15~\cite{ref31}. By systematically analyzing the rich and diverse attack scenarios, traffic patterns, and behavioral characteristics encapsulated within these datasets, the engine constructs a robust, multi-dimensional threat recognition mechanism that integrates feature engineering, pattern matching, and adaptive learning.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.45\textwidth]{图片6.pdf}
+\caption{Flow Chart of Machine Learning Detection Engine}
+\end{figure}
+
+The three major datasets cover the main types of network attacks, as Table~\ref{tab:datasets} shows.
+
+\begin{table}[htbp]
+\centering
+\caption{Main network attack types covered by the three major datasets}
+\label{tab:datasets}
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}p{1.5cm}p{6.2cm}@{}}
+\toprule
+\textbf{Dataset} & \textbf{Main Attack Types} \\
+\midrule
+KDD99 & DoS, R2L, U2R, Probing \\
+CIC-IDS2017 & Brute-force, Heartbleed, SQL injection, DDoS, Botnet \\
+UNSW-NB15 & Backdoor, Trojan, Phishing, Malicious code, File infiltration \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+As shown in Figure~6, the CICFLOW-style feature set is used as input, with models including Isolation Forest~\cite{ref9}, XGBoost~\cite{ref33}, LightGBM~\cite{ref34}, and Random Forest. The three datasets are preprocessed (sample balancing, feature normalization) to build a multi-dataset multi-model detection library. During detection, Isolation Forest screens normal traffic, while XGBoost and other models classify features by weighted confidence; pre-trained models are invoked for inference, and new models can be added to enhance performance.
+
+\subsection{Clue Forensics Agent}
+
+The clue forensics agent is a ``threat context enhancement layer'' that takes detection results as input, confirms the authenticity and impact range of threats through threat intelligence matching, asset impact quantification, and diffusion path deduction, and supports decision-making.
+
+It connects external intelligence such as MITRE ATT\&CK~\cite{ref21} with internal case verification threats, evaluates the impact based on asset tables, and generates propagation maps according to network topology. At the same time, a dual source database is established, and after Sentence-BERT~\cite{ref35} encoding and FAISS retrieval, standardized reports containing target assets are output to provide high-quality input for LLM.
+
+\subsection{Knowledge Base: Multi-Dimensional Structure, Authoritative Sources, and Collaborative Retrieval Mechanism}
+
+As the core of RAG, the vector knowledge base provides real-time authoritative security context for LLMs, addressing their knowledge lag and hallucination. It embeds structured/unstructured data for efficient semantic retrieval, with threat labels as vector retrieval keys to ensure accurate, timely, and credible knowledge input.
+
+The overall authoritative data sources of the knowledge base are shown in Table~\ref{tab:knowledge}.
+
+The knowledge base retrieval agent efficiently obtains knowledge through knowledge vectorization, semantic retrieval, and RAG context generation, in collaboration with workflow engines. When importing knowledge base text, it is embedded into a model and converted into high-dimensional vectors, which are stored in a vector database. After obtaining threat labels, the workflow engine vectorizes the labels and alarm contexts, performs semantic similarity retrieval to improve recall and accuracy, integrates Top-K knowledge blocks and structures them as external knowledge inputs for LLM, and enhances the accuracy and credibility of research conclusions.
+
+\begin{table*}[htbp]
+\centering
+\caption{Statistical table of knowledge base data sources}
+\label{tab:knowledge}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}p{1.4cm}p{1.5cm}p{2.6cm}p{5.2cm}@{}}
+\toprule
+\textbf{Category} & \textbf{Subcategory} & \textbf{Data Sources} & \textbf{Core Function} \\
+\midrule
+Threat Intel. & Vulnerability & CNNVD, CWE & National-level vulnerability details and defect types for asset assessment. \\
+& IoC & ThreatBook, etc. & Real-time IoCs (IPs, URLs, domains) for forensics and threat matching. \\
+Attack Tech. & ATT\&CK & MITRE ATT\&CK & Attack chain positioning and context for alerts. \\
+& CAPEC & CAPEC & Abstract attack patterns and methods. \\
+Defense & D3FEND & MITRE D3FEND & Defense techniques mapped to attack techniques. \\
+Incident Resp. & Disposal & NIST SP 800-61 R3, SANS & Standardized disposal and emergency management. \\
+Compliance & National Std. & openstd.samr.gov.cn & National/industry security compliance. \\
+Reports & Analysis & Vendor reports & Historical cases and trends for LLM reasoning. \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\begin{table}[htbp]
+\centering
+\caption{Ablation results (F1-Score, \%)}
+\label{tab:ablation}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}p{2.6cm}cccc@{}}
+\toprule
+\textbf{Setup} & \textbf{CIC-IDS17} & \textbf{UNSW-NB15} & \textbf{KDD99} & \textbf{Avg. F1} \\
+\midrule
+A: All & 98.3 & 95.8 & 99.3 & 97.8 \\
+B: Snort+ML & 97.8 ($-$0.5) & 94.1 ($-$1.7) & 99.0 ($-$0.3) & 96.9 ($-$0.9) \\
+C: Custom+ML & 96.5 ($-$1.8) & 92.7 ($-$3.1) & 98.5 ($-$0.8) & 95.9 ($-$1.9) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Experimental Analysis}
+\label{sec:experiments}
+
+\subsection{Experimental Design}
+
+This study aims to improve security personnel's efficiency in handling massive alerts. To this end, the model must excel in threat detection accuracy, usability, and overall operational efficiency.
+
+\paragraph{5.1.1 Experiment on the accuracy of the threat detection engine.}
+This experiment is designed to verify the basic detection capability of the integrated detection engine. It evaluates the engine's capability using accuracy, precision, recall, and F1 Score based on the labeled public datasets CIC-IDS2017, UNSW-NB15, and KDD99. In addition, to demonstrate the superiority of the proposed model, relevant studies in recent years are selected for comparison: Comparative Study 1~\cite{ref26}: Reinforcement Learning Transfer Framework; Comparative Study 2~\cite{ref27}: Hybrid IDS based on dynamic spatial-temporal graph neural network (GCN-2-Former, in-vehicle networks); Comparative Study 3~\cite{ref28}: Deep learning approach for intelligent intrusion detection system.
+
+\paragraph{5.1.2 Experiment on the usability of the threat detection engine.}
+This experiment verifies the threat detection engine's throughput and latency for massive network data, ensuring real/near-real-time production adaptability. Tcpreplay replays high-rate background traffic with injected attack packets, evaluated via throughput, latency, and resource utilization.
+
+\paragraph{5.1.3 Experiment on the overall usability of the model.}
+This experiment is conducted to verify the usability of the model proposed in this study in improving the analysis efficiency of security analysts, covering two aspects: analysis accuracy and analysis speed. Fifty independent traffic files are randomly selected from the dataset to form a test set. First, a review team composed of 2--3 security analysts conducts independent manual analysis on each alert in the test set and provides the analysis results. Second, the alerts in the test set are input into the LLM workflow to obtain the output results of the LLM.
+
+The experiment focuses on the accuracy of threat detection, operational efficiency, and knowledge retrieval usability of the integrated model. Threat detection accuracy experiment: Using accuracy, precision, recall, and F1 Score as indicators, validate the performance of the integrated engine through benchmark testing, ablation experiments, and comparative experiments. Threat detection efficiency experiment: Using throughput, latency, and resource utilization as indicators, monitoring system performance under different loads through replay traffic to verify real-time performance. Model overall usability experiment: Select 50 traffic files, compare the accuracy and analysis efficiency of LLM and manual judgment, and have a third-party blind review report quality.
+
+\subsection{Data Introduction}
+
+The experimental data is divided into three categories, supporting different experimental objectives:
+
+Benchmark dataset: used for accuracy verification, including CIC-IDS2017, UNSW-NB15, KDD99.
+
+Simulated dataset: used for performance testing, based on CIC-IDS2017 normal traffic, IP simulated internal network segment modified by tcprewrite, tcpreplay replayed at 1Gbps/5Gbps/10Gbps, injecting 1\%--5\% attack traffic.
+
+Knowledge base data: supports LLM retrieval, integrates Snort rule base, ATT\&CK MITRE framework, CVE vulnerability summary, and security vendor reports.
+
+\subsection{Accuracy Experiment}
+
+As shown in Figures~7--10, this is the detection performance of the threat detection engine proposed in this study on three different datasets. The three benchmark datasets were each randomly divided into training set, validation set, and test set at a ratio of 70\% : 15\% : 15\%. The integrated detection engine was run on the test set, and the accuracy, precision, recall, and F1-Score were calculated. It can be seen that the threat detection engine proposed in this study exhibits good detection capability across all three datasets. Additionally, based on its performance on different datasets, the engine achieves the best results on the KDD99 dataset, while its performance on the UNSW-NB15 dataset is relatively lower. This is because the attack patterns in KDD99 are relatively simple with distinct feature differentiation, whereas UNSW-NB15 includes more diverse attack types, more complex network environment simulations, and traffic features that are closer to those in the real world.
+
+Ablation experiments (Table~\ref{tab:ablation}) verify the necessity of integrating multiple detection methods. Scheme A (all components) achieves an average F1-score of 97.8\%---optimal across datasets. Scheme B (Snort+ML) sees a 0.9\% average drop (1.7\% on UNSW-NB15), while Scheme C (custom rules+ML) declines 1.9\% (3.1\% on UNSW-NB15). This confirms multi-method integration enhances robustness via complementary advantages.
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.35\textwidth]{图片7.pdf}
+\caption{Performance Metrics Comparison Across Datasets}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.35\textwidth]{图片8.pdf}
+\caption{ROC Curves for Threat Detection Engine}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.35\textwidth]{图片9.pdf}
+\caption{Performance Trends Across Datasets}
+\end{figure}
+
+\begin{figure}[htbp]
+\centering
+\includegraphics[width=0.15\textwidth]{图片10.pdf}
+    \includegraphics[width=0.15\textwidth]{图片101.pdf}
+    \includegraphics[width=0.15\textwidth]{图片102.pdf}
+\caption{Confusion Matrix of CIC-IDS2017 / UNSW-NB15 / KDD99}
+\end{figure}
+
+\begin{figure*}[htbp]
+\centering
+\includegraphics[width=0.45\textwidth]{图片11.pdf}
+\caption{Accuracy and F1-Score Comparison Across Methods and Datasets}
+\label{fig:comparison}
+\end{figure*}
+
+To verify the engine's superiority, comparisons with recent studies (Figure~11) show it outperforms all baselines across datasets. Vs.\ the best baseline (dynamic spatial-temporal GNN~\cite{ref27}): CIC-IDS2017 (1.3\% accuracy/F1 gain), UNSW-NB15 (1.8\% accuracy, 2.2\% F1 gain), KDD99 (0.6\% accuracy, 0.8\% F1 gain). This advantage comes from innovative feature extraction, anomaly detection, and classification design, ensuring strong generalization.
+
+\subsection{Performance Experiment}
+
+\begin{table}[htbp]
+\centering
+\caption{Throughput and resource under different traffic loads}
+\label{tab:perf}
+\small
+\setlength{\tabcolsep}{4pt}
+\begin{tabular}{@{}ccccc@{}}
+\toprule
+\textbf{Load (Gbps)} & \textbf{Mpps} & \textbf{Gbps} & \textbf{CPU (\%)} & \textbf{Mem (GB)} \\
+\midrule
+1 & 1.49 & 0.995 & $\sim$15 & 2.1 \\
+5 & 7.46 & 4.98 & $\sim$65 & 2.5 \\
+10 & 9.87 & 6.58 & $\sim$95 & 2.8 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+As shown in Table~\ref{tab:perf}, the engine maintains near-line-speed processing (7.46~Mpps/4.98~Gbps) from 1~Gbps to 5~Gbps, with good scalability. At 10~Gbps, throughput drops to 9.87~Mpps/6.58~Gbps due to bottlenecks. CPU utilization rises sharply from $\sim$15\% to $\sim$95\% (memory stable at 2.1--2.8~GB). The engine performs stably below 5~Gbps; CPU is the main bottleneck near 10~Gbps, requiring high-load optimization or distributed deployment.
+
+\subsection{Usability Experiment}
+
+The model's usability for alert analysis is evaluated via attack type accuracy, efficiency, and report usability (Table~5). On 50 traffic files, human analysts (92\% accuracy) outperform the LLM (86\%), with humans excelling in complex threats. LLM misjudgments focus on encrypted C\&C and fine-grained attack classification; human errors stem from over-sensitivity to legitimate traffic and poor new variant identification. Still, the LLM's 86\% accuracy effectively assists security analysts.
+
+\begin{table}[htbp]
+\centering
+\caption{Attack type judgment: LLM vs.\ manual (50 files)}
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}p{1.5cm}c cp{3.8cm}@{}}
+\toprule
+\textbf{Object} & \textbf{Correct} & \textbf{Acc.} & \textbf{Misjudgment} \\
+\midrule
+LLM & 43 & 86\% & \#12: C\&C as Normal; \#37: SQL inj. as path traversal \\
+Manual & 46 & 92\% & \#08: CDN as DDoS; \#29: unknown Brute Force variant \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+While slightly less accurate than humans, the LLM achieves a qualitative speed improvement (Table~6). It analyzes all 50 samples in 8 minutes ($\approx$10.2~s per sample) vs.\ 6h23m for humans ($\approx$7.7~min per sample)---45$\times$ higher efficiency. This gap underscores its automation potential, enabling near-real-time threat analysis for large-scale rapid-response security operations.
+
+\begin{table}[htbp]
+\centering
+\caption{Speed: LLM vs.\ manual (time per sample)}
+\small
+\begin{tabular}{@{}p{1.8cm}p{2.2cm}p{2.4cm}@{}}
+\toprule
+\textbf{Object} & \textbf{Time/Sample} & \textbf{Efficiency} \\
+\midrule
+LLM & $\sim$10.2 s & $\sim$45$\times$ \\
+Manual & $\sim$7.7 min & 1$\times$ (baseline) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Beyond attack type accuracy and analysis speed, the final analysis report is also critical. Experts blind-reviewed and scored 100 reports from the LLM and human team (Table~7). An in-depth analysis was conducted on the scoring results for each dimension, as shown in Table~8.
+
+\begin{table}[htbp]
+\centering
+\caption{Blind review scores (100 reports)}
+\small
+\setlength{\tabcolsep}{3pt}
+\begin{tabular}{@{}p{1.4cm}ccccc@{}}
+\toprule
+\textbf{Object} & \textbf{Acc.} & \textbf{Complete.} & \textbf{Clarity} & \textbf{Oper.} & \textbf{Avg.} \\
+\midrule
+LLM & 4.0 & 4.6 & 4.7 & 3.8 & 4.28 \\
+Manual & 4.8 & 4.4 & 4.0 & 4.6 & 4.45 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table*}[htbp]
+\centering
+\caption{Blind review by dimension (LLM vs.\ manual)}
+\small
+\setlength{\tabcolsep}{5pt}
+\begin{tabular}{@{}p{1.6cm}p{4.2cm}p{4.2cm}@{}}
+\toprule
+\textbf{Dimension} & \textbf{LLM} & \textbf{Manual} \\
+\midrule
+Accuracy (4.0 vs.\ 4.8) & Generally reliable; reasoning weaker than experts on complex, out-of-pattern cases. & Team discussion corrects biases; near-expert accuracy. \\
+Completeness (4.6 vs.\ 4.4) & Strength: follows templates, stable, rarely omits dimensions. & Sometimes omits ``potential impacts'' or ``other possibilities.'' \\
+Clarity (4.7 vs.\ 4.0) & Strength: unified structure, fluent and standardized language. & Multi-author text can be lengthy or inconsistent. \\
+Operability (3.8 vs.\ 4.6) & Weakness: generic advice (e.g., block IPs, patch); few env.-specific steps. & Strength: concrete, policy-aligned suggestions (e.g., firewall rules, contact admin). \\
+\bottomrule
+\end{tabular}
+\end{table*}
+
+\section{Conclusion}
+
+This study proposes a RAG-enhanced generative large model-driven dynamic workflow engine framework for SOC alert analysis, addressing low manual efficiency and fixed process engine inflexibility to break through from ``fixed process execution'' to ``intelligent process orchestration''. Core contributions include a RAG-LLM-centric dynamic workflow engine overcoming traditional SOAR rigidity, a multi-agent collaborative mechanism forming a ``detection--forensics--knowledge integration'' closed loop, and valid experimental results---95.8\%--99.3\% F1-Score across three datasets, 6.58~Gbps throughput at 10~Gbps traffic, 45$\times$ manual efficiency, and $\leq$1.36\% false alarm rate. The framework balances accuracy and real-time performance; future work will optimize model robustness, build knowledge update mechanisms, and expand cross-domain collaboration capabilities.
+
+\begin{acks}
+The authors would like to express sincere gratitude to all those who have contributed to this study with their support and assistance.
+\end{acks}
+
+\begin{thebibliography}{99}
+\bibitem{ref1} Verizon. 2024. 2024 Data Breach Investigation Report. Technical Report. \url{https://www.verizon.com/business/resources/reports/2024-dbir-data-breach-investigations-report.pdf}
+\bibitem{ref2} People's Daily. 2025. Over 1,300 overseas APT attacks target China's 14 key sectors in 2024: cybersecurity report. \url{https://en.people.cn/n3/2025/0211/c90000-20275449.html}
+\bibitem{ref3} IBM. 2024. Cost of a Data Breach Report 2024. IBM Security. \url{https://www.ibm.com/think/insights/whats-new-2024-cost-of-a-data-breach-report}
+\bibitem{ref4} E. Agyepong, Y. Cherdantseva, P. Reinecke, and P. Burnap. 2020. Challenges and performance metrics for security operations center analysts: A systematic review. \textit{Journal of Cyber Security Technology} 4, 2 (2020), 125--152. DOI:10.1080/23742917.2019.1698178
+\bibitem{ref5} A. Khraisat, I. Gondal, P. Vamplew, and J. Kamruzzaman. 2019. Survey of intrusion detection systems: techniques, datasets and challenges. \textit{Cybersecurity} 2, 20 (2019). DOI:10.1186/s42400-019-0038-7
+\bibitem{ref6} R. Bejtlich. 2004. \textit{The Tao of Network Security Monitoring: Beyond Intrusion Detection}. Pearson Education. DOI:10.5555/1024187
+\bibitem{ref7} W. U. Hassan et al. 2019. NoDoze: Combatting threat alert fatigue with automated provenance triage. In \textit{Proc.\ NDSS 2019}. DOI:10.14722/ndss.2019.23349
+\bibitem{ref8} R. Sommer and V. Paxson. 2010. Outside the closed world: On using machine learning for network intrusion detection. In \textit{Proc.\ IEEE S\&P 2010}. IEEE, 305--316. DOI:10.1109/SP.2010.25
+\bibitem{ref9} F. T. Liu, K. M. Ting, and Z.-H. Zhou. 2008. Isolation Forest. In \textit{Proc.\ ICDM 2008}. IEEE, 413--422. DOI:10.1109/ICDM.2008.17
+\bibitem{ref10} R. A. Bridges et al. 2023. Testing SOAR tools in use. \textit{Computers \& Security} 126 (2023), 103201. DOI:10.1016/j.cose.2023.103201
+\bibitem{ref11} B. S. Bhati et al. 2021. An improved ensemble based intrusion detection technique using XGBoost. \textit{Transactions on Emerging Telecommunications Technologies} 32, 6 (2021), e4076. DOI:10.1002/ett.4076
+\bibitem{ref12} H. Hou et al. 2020. Hierarchical Long Short-Term Memory Network for Cyberattack Detection. \textit{IEEE Access} 8 (2020), 55611--55622. DOI:10.1109/ACCESS.2020.2983953
+\bibitem{ref13} Y. Huang et al. 2022. Graph neural networks and cross-protocol analysis for detecting malicious IP addresses. \textit{Complex \& Intelligent Systems} 9 (2022), 1977--1992. DOI:10.1007/s40747-022-00838-y
+\bibitem{ref14} Y. Cheng et al. 2024. CTINexus: Automatic Cyber Threat Intelligence Knowledge Graph Construction Using Large Language Models. arXiv:2410.21060. DOI:10.48550/arXiv.2410.21060
+\bibitem{ref15} Y. Sun et al. 2024. LLM4Vuln: A unified evaluation framework for decoupling and enhancing LLMs' vulnerability reasoning. arXiv:2401.16185. DOI:10.48550/arXiv.2401.16185
+\bibitem{ref16} V. B. Krishna. 2024. AttackQA: Development and adoption of a dataset for assisting cybersecurity operations using fine-tuned and open-source LLMs. arXiv:2411.01073. DOI:10.48550/arXiv.2411.01073
+\bibitem{ref17} Ismail et al. 2025. Toward Robust Security Orchestration and Automated Response in Security Operations Centers with a Hyper-Automation Approach Using Agentic Artificial Intelligence. \textit{Information} 16, 5 (2025), 365. DOI:10.3390/info16050365
+\bibitem{ref18} S. Tariq, M. B. Chhetri, S. Nepal, and C. Paris. 2025. Alert Fatigue in Security Operations Centres: Research Challenges and Opportunities. \textit{ACM Computing Surveys} 57, 9 (2025), Article 224. DOI:10.1145/3723158
+\bibitem{ref19} A. Nelson et al. 2025. Incident Response Recommendations and Considerations (SP 800-61 Rev.\ 3). NIST Special Publication 800-61 Rev.\ 3. DOI:10.6028/NIST.SP.800-61r3
+\bibitem{ref20} F. Jalalvand et al. 2024. Alert prioritisation in security operations centres: A systematic survey on criteria and methods. \textit{ACM Computing Surveys} 57, 2 (2024), Article 44. DOI:10.1145/3695462
+\bibitem{ref21} M. Al-Sada, J.-F. Sadighian, and G. Oligeri. 2023. MITRE ATT\&CK: State of the Art and Way Forward. arXiv:2308.14016. DOI:10.48550/arXiv.2308.14016
+\bibitem{ref22} M. Turcotte, F. Labrèche, and S.-O. Paquette. 2025. Automated Alert Classification and Triage (AACT): An Intelligent System for the Prioritisation of Cybersecurity Alerts. arXiv:2505.09843. DOI:10.48550/arXiv.2505.09843
+\bibitem{ref23} W. Park and S. Ahn. 2017. Performance comparison and detection analysis in Snort and Suricata environment. \textit{Wireless Personal Communications} 94 (2017), 241--252. DOI:10.1007/s11277-016-3209-9
+\bibitem{ref24} J. S. White, T. Fitzsimmons, and J. N. Matthews. 2013. Quantitative analysis of intrusion detection systems: Snort and Suricata. In \textit{Cyber Sensing 2013}, Vol.\ 8757. SPIE, 10--21. DOI:10.1117/12.2015616
+\bibitem{ref25} S. A. R. Shah and B. Issac. 2018. Performance comparison of intrusion detection systems and application of machine learning to Snort system. \textit{Future Generation Computer Systems} 80 (2018), 157--170. DOI:10.1016/j.future.2017.10.016
+\bibitem{ref26} M. He et al. 2024. Reinforcement learning meets network intrusion detection: A transferable and adaptable framework for anomaly behavior identification. \textit{IEEE Trans.\ Network and Service Management} 21, 2 (2024), 2477--2492. DOI:10.1109/TNSM.2024.3352586
+\bibitem{ref27} J. Zhang, X. Fan, Z. Zhao. 2025. A hybrid intrusion detection model based on dynamic spatial-temporal graph neural network in in-vehicle networks. \textit{Scientific Reports} 15, 34736 (2025). DOI:10.1038/s41598-025-18401-3
+\bibitem{ref28} R. Vinayakumar et al. 2019. Deep learning approach for intelligent intrusion detection system. \textit{IEEE Access} 7 (2019), 41525--41550. DOI:10.1109/ACCESS.2019.2895334
+\bibitem{ref29} M. Tavallaee et al. 2009. A detailed analysis of the KDD CUP 99 data set. In \textit{Proc.\ CISDA 2009}. IEEE, 1--6. DOI:10.1109/CISDA.2009.5356528
+\bibitem{ref30} I. Sharafaldin, A. H. Lashkari, and A. A. Ghorbani. 2018. Toward generating a new intrusion detection dataset and intrusion traffic characterization. In \textit{Proc.\ ICISSP 2018}. SCITEPRESS, 108--116. DOI:10.5220/0006639801080116
+\bibitem{ref31} N. Moustafa and J. Slay. 2015. UNSW-NB15: a comprehensive data set for network intrusion detection systems. In \textit{Proc.\ MilCIS 2015}. IEEE, 1--6. DOI:10.1109/MilCIS.2015.7348942
+\bibitem{ref33} T. Chen and C. Guestrin. 2016. XGBoost: A scalable tree boosting system. In \textit{Proc.\ KDD 2016}. ACM, 785--794. DOI:10.1145/2939672.2939785
+\bibitem{ref34} G. Ke et al. 2017. LightGBM: A highly efficient gradient boosting decision tree. In \textit{Advances in NIPS 30}. Curran Associates, 3146--3154. DOI:10.5555/3294996.3295074
+\bibitem{ref35} N. Reimers and I. Gurevych. 2019. Sentence-BERT: Sentence embeddings using siamese BERT-networks. In \textit{Proc.\ EMNLP-IJCNLP 2019}. ACL, 3982--3992. DOI:10.18653/v1/D19-1410
+\end{thebibliography}
+
+\end{document}
